@@ -46,16 +46,24 @@ pip install -r requirements.txt
 
 ### Usage
 
+**Recommended: Use V2 for best visuals**
+
 ```bash
 # Interactive mode (file dialog)
-python orbital_survey_enhanced.py
+python orbital_survey_v2.py
 
 # Command line
-python orbital_survey_enhanced.py input.jpg output.png
+python orbital_survey_v2.py input.jpg output.png
 
 # Auto-naming
-python orbital_survey_enhanced.py input.jpg
+python orbital_survey_v2.py input.jpg
 ```
+
+**V2 includes:**
+- 40% larger side panel (better readability)
+- Percentage labels on color bars
+- Radial FFT spectrum (visually interesting)
+- Cleaner design and typography
 
 ## Configuration
 
@@ -79,11 +87,19 @@ class Config:
 
 ## Version Comparison
 
-### Enhanced Version (Recommended)
+### V2 (Recommended) ⭐
 - ✅ Full resolution preservation
 - ✅ Adaptive layouts (portrait/landscape/panorama)
+- ✅ **40% larger side panel** (better readability)
+- ✅ **Percentage labels** on color bars
+- ✅ **Radial FFT visualization** (more interesting)
+- ✅ Cleaner design and typography
+
+### Enhanced Version
+- ✅ Full resolution preservation
+- ✅ Adaptive layouts
 - ✅ Better error handling
-- ✅ Configurable scaling
+- 30% side panel (smaller than V2)
 
 ### Original Version
 - Fixed output width (1920px)
