@@ -1,11 +1,12 @@
 """
-ORBITAL SURVEY PROTOCOL - V4
-=============================
+ORBITAL SURVEY PROTOCOL - V4.1
+===============================
 Clean 50/50 split layout:
   LEFT:  Source image with contour/gradient/constellation overlays + HUD
   RIGHT: Two stacked analysis panels
     TOP:    Color distribution (proportional bars + hex + percentages)
-    BOTTOM: Hue/Saturation scatter map - colorful & interesting
+    BOTTOM: Chromatic Waveform — translucent crystalline RGB channel peaks
+            on a dark background, inspired by generative data art
 """
 
 import numpy as np
@@ -24,23 +25,20 @@ import colorsys
 # =============================================================================
 
 class Config:
-    # Output
-    OUTPUT_WIDTH = 3840       # 4K width
-    PANEL_SPLIT = 0.50        # 50% image, 50% panels
+    OUTPUT_WIDTH = 3840
+    PANEL_SPLIT = 0.50
     PADDING = 60
-    PANEL_GAP = 40            # Gap between the two right panels
+    PANEL_GAP = 40
 
-    # Colors (RGBA)
-    PRIMARY = (0, 180, 160, 255)       # Teal
-    SECONDARY = (220, 80, 40, 255)     # Red-orange
-    TERTIARY = (120, 60, 200, 255)     # Purple
+    PRIMARY = (0, 180, 160, 255)
+    SECONDARY = (220, 80, 40, 255)
+    TERTIARY = (120, 60, 200, 255)
     DIM = (80, 80, 80, 255)
     LIGHT_DIM = (140, 140, 140, 255)
     BACKGROUND = (255, 255, 255, 255)
     PANEL_BG = (248, 249, 252, 255)
     PANEL_BORDER = (0, 180, 160, 180)
 
-    # Overlays
     BASE_IMAGE_FADE = 0.10
     CONTOUR_LEVELS = 18
     CONTOUR_SMOOTHING = 3.0
@@ -53,9 +51,13 @@ class Config:
     NUM_COLORS = 10
     GRID_DIVISIONS = 8
 
+    WAVEFORM_NUM_BANDS = 9
+    WAVEFORM_SMOOTHING = 4
+    WAVEFORM_PEAK_SCALE = 0.85
+
 
 # =============================================================================
-# OVERLAY LAYERS (drawn on the image half)
+# OVERLAY LAYERS
 # =============================================================================
 
 def generate_contours(gray, config=Config):
@@ -73,8 +75,7 @@ def generate_contours(gray, config=Config):
 def draw_contours(canvas, contours_all, offset, config=Config):
     draw = ImageDraw.Draw(canvas, 'RGBA')
     for level, contours in contours_all:
-        alpha = int(80 + (level / 255) * 120)
-        alpha = min(alpha, 200)
+        alpha = min(int(80 + (level / 255) * 120), 200)
         color = (*config.PRIMARY[:3], alpha)
         for contour in contours:
             points = contour.squeeze()
@@ -164,8 +165,7 @@ def draw_constellation(canvas, points, offset, config=Config):
         except Exception:
             pass
     for px, py in scaled:
-        draw.ellipse([px - 4, py - 4, px + 4, py + 4],
-                     fill=(*config.TERTIARY[:3], 20))
+        draw.ellipse([px - 4, py - 4, px + 4, py + 4], fill=(*config.TERTIARY[:3], 20))
         draw.ellipse([px - 2, py - 2, px + 2, py + 2], fill=config.TERTIARY)
     return canvas
 
@@ -175,7 +175,6 @@ def draw_hud(canvas, img_bounds, orig_size, config=Config):
     x, y, w, h = img_bounds
     orig_w, orig_h = orig_size
 
-    # Subtle grid
     for i in range(1, config.GRID_DIVISIONS):
         lx = x + w * i // config.GRID_DIVISIONS
         ly = y + h * i // config.GRID_DIVISIONS
@@ -183,42 +182,36 @@ def draw_hud(canvas, img_bounds, orig_size, config=Config):
         draw.line([(lx, y), (lx, y + h)], fill=(*config.PRIMARY[:3], a), width=1)
         draw.line([(x, ly), (x + w, ly)], fill=(*config.PRIMARY[:3], a), width=1)
 
-    # Corner brackets
     bl = 35
     for cx, cy, dx, dy in [(x, y, 1, 1), (x + w, y, -1, 1), (x, y + h, 1, -1), (x + w, y + h, -1, -1)]:
         draw.line([(cx, cy), (cx + dx * bl, cy)], fill=config.PRIMARY, width=2)
         draw.line([(cx, cy), (cx, cy + dy * bl)], fill=config.PRIMARY, width=2)
 
-    # Crosshair
     cx, cy = x + w // 2, y + h // 2
     cs = 22
     for s, e in [((cx - cs, cy), (cx - 6, cy)), ((cx + 6, cy), (cx + cs, cy)),
                  ((cx, cy - cs), (cx, cy - 6)), ((cx, cy + 6), (cx, cy + cs))]:
         draw.line([s, e], fill=(*config.PRIMARY[:3], 100), width=1)
 
-    # Header text
     cw = canvas.size[0]
-    draw.text((15, 12), f"ORBITAL SURVEY v4", fill=config.PRIMARY)
-    draw.text((15, 30), f"Reference: {orig_w}×{orig_h}px", fill=config.DIM)
+    draw.text((15, 12), "ORBITAL SURVEY v4", fill=config.PRIMARY)
+    draw.text((15, 30), f"Reference: {orig_w}\u00d7{orig_h}px", fill=config.DIM)
     draw.text((cw - 200, 12), "SCAN COMPLETE", fill=config.SECONDARY)
 
-    # Legend at bottom left
     legend_y = canvas.size[1] - 30
     lx = config.PADDING
     for color, label in [(config.PRIMARY, "CONTOURS"), (config.SECONDARY, "GRADIENT"), (config.TERTIARY, "FEATURES")]:
         draw.rectangle([lx, legend_y, lx + 12, legend_y + 12], fill=color, outline=config.DIM, width=1)
         draw.text((lx + 18, legend_y - 1), label, fill=config.DIM)
         lx += 120
-
     return canvas
 
 
 # =============================================================================
-# RIGHT PANEL: COLOR DISTRIBUTION (top)
+# RIGHT PANEL TOP: COLOR DISTRIBUTION
 # =============================================================================
 
 def extract_colors(image, config=Config):
-    """K-means color extraction with percentages and HSV info."""
     pixels = np.array(image).reshape(-1, 3)
     sample = pixels[np.random.choice(len(pixels), min(15000, len(pixels)), replace=False)]
     kmeans = KMeans(n_clusters=config.NUM_COLORS, random_state=42, n_init=10)
@@ -231,168 +224,211 @@ def extract_colors(image, config=Config):
         r, g, b = int(color[0]), int(color[1]), int(color[2])
         h_val, s_val, v_val = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
         results.append(((r, g, b), float(pct), h_val, s_val, v_val))
-    results.sort(key=lambda x: -x[1])  # Sort by percentage descending
+    results.sort(key=lambda x: -x[1])
     return results
 
 
 def draw_color_panel(canvas, colors, position, size, config=Config):
-    """
-    Color distribution panel: proportional horizontal bars with
-    color swatch, percentage, hex code, and HSV info.
-    """
     draw = ImageDraw.Draw(canvas, 'RGBA')
     x, y = position
     w, h = size
 
-    # Panel background with rounded feel
     draw.rectangle([x, y, x + w, y + h], fill=config.PANEL_BG, outline=config.PANEL_BORDER, width=2)
 
-    # Title area
     title_h = 55
     draw.text((x + 20, y + 14), "CHROMATIC DISTRIBUTION", fill=config.PRIMARY)
-    draw.text((x + 20, y + 32), f"{len(colors)} dominant clusters · K-means extraction", fill=config.LIGHT_DIM)
+    draw.text((x + 20, y + 32), f"{len(colors)} dominant clusters \u00b7 K-means extraction", fill=config.LIGHT_DIM)
 
-    # Bars area
     bar_area_y = y + title_h
     bar_area_h = h - title_h - 15
     bar_h = max(28, bar_area_h // len(colors))
-    max_bar_w = w - 220  # Leave room for labels on the right
+    max_bar_w = w - 220
 
     for i, (rgb, pct, h_val, s_val, v_val) in enumerate(colors):
         by = bar_area_y + i * bar_h
-        bw = int(max_bar_w * (pct / colors[0][1]))  # Relative to largest
+        bw = int(max_bar_w * (pct / colors[0][1]))
         bw = max(bw, 20)
 
-        # Background track
+        r, g, b = rgb
         draw.rectangle([x + 18, by + 4, x + 18 + max_bar_w, by + bar_h - 6],
                        fill=(235, 235, 235, 255))
-
-        # Color bar with slight 3D effect
-        r, g, b = rgb
-        # Shadow
         draw.rectangle([x + 19, by + 5, x + 18 + bw + 1, by + bar_h - 5],
                        fill=(r // 2, g // 2, b // 2, 80))
-        # Main bar
         draw.rectangle([x + 18, by + 4, x + 18 + bw, by + bar_h - 6],
                        fill=(r, g, b, 255),
                        outline=(max(r - 40, 0), max(g - 40, 0), max(b - 40, 0), 200), width=1)
 
-        # Percentage (bold feel - draw twice offset)
-        pct_text = f"{pct * 100:.1f}%"
         tx = x + 18 + max_bar_w + 12
-        draw.text((tx, by + 2), pct_text, fill=config.PRIMARY)
-
-        # Hex code
-        hex_code = f"#{r:02X}{g:02X}{b:02X}"
-        draw.text((tx, by + bar_h // 2), hex_code, fill=config.DIM)
-
+        draw.text((tx, by + 2), f"{pct * 100:.1f}%", fill=config.PRIMARY)
+        draw.text((tx, by + bar_h // 2), f"#{r:02X}{g:02X}{b:02X}", fill=config.DIM)
     return canvas
 
 
 # =============================================================================
-# RIGHT PANEL: HUE-SATURATION PIXEL MAP (bottom) — colorful & interesting
+# RIGHT PANEL BOTTOM: CHROMATIC WAVEFORM (crystalline peaks on dark bg)
 # =============================================================================
 
-def compute_hs_scatter(image, sample_count=8000):
+def compute_waveform_data(image, config=Config):
     """
-    Sample pixels from the image and return their hue, saturation, value
-    for plotting in a scatter map on a hue wheel / HS plane.
+    Sample horizontal bands from the image, extract per-column RGB averages.
+    Each band becomes a waveform triplet (R, G, B).
     """
-    pixels = np.array(image).reshape(-1, 3)
-    idx = np.random.choice(len(pixels), min(sample_count, len(pixels)), replace=False)
-    sample = pixels[idx]
+    arr = np.array(image).astype(float)
+    h, w, _ = arr.shape
+    num_bands = config.WAVEFORM_NUM_BANDS
+    band_h = h // num_bands
+    sigma = config.WAVEFORM_SMOOTHING
 
-    hsv_data = []
-    for r, g, b in sample:
-        h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-        hsv_data.append((h, s, v, int(r), int(g), int(b)))
-    return hsv_data
+    bands = []
+    for i in range(num_bands):
+        y_start = i * band_h
+        y_end = min((i + 1) * band_h, h)
+        strip = arr[y_start:y_end, :, :]
+        col_avg = strip.mean(axis=0)  # (w, 3)
+        r_smooth = gaussian_filter(col_avg[:, 0], sigma=sigma)
+        g_smooth = gaussian_filter(col_avg[:, 1], sigma=sigma)
+        b_smooth = gaussian_filter(col_avg[:, 2], sigma=sigma)
+        bands.append((r_smooth, g_smooth, b_smooth))
+    return bands
 
 
-def draw_hs_panel(canvas, hsv_data, dominant_colors, position, size, config=Config):
+def draw_waveform_panel(canvas, waveform_bands, position, size, config=Config):
     """
-    Hue × Saturation scatter plot — each sampled pixel is plotted
-    in its actual color on a 2D plane. Hue on X, Saturation on Y.
-    Includes axis labels and a hue rainbow bar along the bottom.
+    Crystalline RGB waveforms on dark background.
+    Each band draws three translucent channel polygons with upward peaks
+    AND mirrored downward reflections for that crystalline/aurora effect.
+    Colors blend where channels overlap, creating cyans, magentas, and whites.
     """
-    draw = ImageDraw.Draw(canvas, 'RGBA')
     x, y = position
     w, h = size
 
-    # Panel background
-    draw.rectangle([x, y, x + w, y + h], fill=config.PANEL_BG, outline=config.PANEL_BORDER, width=2)
+    # Use numpy for the dark panel to allow additive blending
+    panel_arr = np.zeros((h, w, 4), dtype=np.uint8)
+    panel_arr[:, :, 3] = 255
+    # Dark background with subtle blue tint
+    panel_arr[:, :, 0] = 10
+    panel_arr[:, :, 1] = 12
+    panel_arr[:, :, 2] = 20
 
-    # Title
-    title_h = 55
-    draw.text((x + 20, y + 14), "HUE × SATURATION MAP", fill=config.PRIMARY)
-    draw.text((x + 20, y + 32), f"{len(hsv_data)} sampled pixels · color space distribution", fill=config.LIGHT_DIM)
+    panel = Image.fromarray(panel_arr, 'RGBA')
+    draw = ImageDraw.Draw(panel, 'RGBA')
 
-    # Plot area
-    margin_l, margin_r, margin_t, margin_b = 50, 25, 10, 65
-    plot_x = x + margin_l
-    plot_y = y + title_h + margin_t
-    plot_w = w - margin_l - margin_r
-    plot_h = h - title_h - margin_t - margin_b
+    title_h = 50
+    draw.text((20, 12), "CHROMATIC WAVEFORM", fill=(0, 200, 180, 255))
+    draw.text((20, 30), f"{len(waveform_bands)} horizontal bands \u00b7 RGB channel intensity",
+              fill=(100, 110, 120, 255))
 
-    # Plot background - very subtle grid
-    draw.rectangle([plot_x, plot_y, plot_x + plot_w, plot_y + plot_h],
-                   fill=(255, 255, 255, 255), outline=(200, 200, 200, 255), width=1)
+    plot_y_start = title_h + 8
+    plot_h = h - title_h - 12
+    num_bands = len(waveform_bands)
+    band_spacing = plot_h / num_bands
 
-    # Grid lines
-    for i in range(1, 10):
-        gx = plot_x + plot_w * i // 10
-        draw.line([(gx, plot_y), (gx, plot_y + plot_h)], fill=(235, 235, 235, 255), width=1)
-    for i in range(1, 5):
-        gy = plot_y + plot_h * i // 5
-        draw.line([(plot_x, gy), (plot_x + plot_w, gy)], fill=(235, 235, 235, 255), width=1)
+    margin_x = 25
+    plot_w = w - margin_x * 2
 
-    # Plot each pixel as a colored dot
-    for hue, sat, val, r, g, b in hsv_data:
-        px = int(plot_x + hue * plot_w)
-        py = int(plot_y + plot_h - sat * plot_h)  # High sat at top
-        # Dot opacity scales with value (brighter = more opaque)
-        alpha = int(60 + val * 160)
-        draw.ellipse([px - 2, py - 2, px + 2, py + 2], fill=(r, g, b, alpha))
+    for band_idx, (r_wave, g_wave, b_wave) in enumerate(waveform_bands):
+        baseline_y = int(plot_y_start + (band_idx + 0.5) * band_spacing)
+        max_peak_up = band_spacing * config.WAVEFORM_PEAK_SCALE * 0.65
+        max_peak_down = band_spacing * config.WAVEFORM_PEAK_SCALE * 0.35  # Smaller reflection
 
-    # Overlay dominant color positions as larger marked circles
-    for rgb, pct, h_val, s_val, v_val in dominant_colors:
-        px = int(plot_x + h_val * plot_w)
-        py = int(plot_y + plot_h - s_val * plot_h)
-        r, g, b = rgb
-        # White outline ring
-        draw.ellipse([px - 8, py - 8, px + 8, py + 8], outline=(255, 255, 255, 255), width=3)
-        draw.ellipse([px - 8, py - 8, px + 8, py + 8],
-                     outline=(max(r - 60, 0), max(g - 60, 0), max(b - 60, 0), 255), width=2)
-        draw.ellipse([px - 5, py - 5, px + 5, py + 5], fill=(r, g, b, 255))
+        num_cols = len(r_wave)
+        step = max(1, num_cols // 400)  # Higher resolution sampling
 
-    # Hue rainbow bar along the bottom
-    rainbow_y = plot_y + plot_h + 10
-    rainbow_h = 14
-    steps = plot_w
-    for i in range(steps):
-        hue = i / steps
-        r, g, b = [int(c * 255) for c in colorsys.hsv_to_rgb(hue, 0.9, 0.95)]
-        rx = plot_x + i
-        draw.line([(rx, rainbow_y), (rx, rainbow_y + rainbow_h)], fill=(r, g, b, 255))
+        # Channel definitions with distinct hues
+        # Cyan-ish blue, Magenta-ish pink, Golden-green
+        channels = [
+            (b_wave, (60, 180, 255), (30, 100, 200)),     # Blue/Cyan
+            (g_wave, (0, 255, 180), (0, 180, 120)),        # Teal/Green
+            (r_wave, (255, 80, 160), (200, 40, 120)),      # Pink/Magenta
+        ]
 
-    draw.rectangle([plot_x, rainbow_y, plot_x + plot_w, rainbow_y + rainbow_h],
-                   outline=(180, 180, 180, 255), width=1)
+        for wave, color_bright, color_dim in channels:
+            w_min, w_max = wave.min(), wave.max()
+            rng = w_max - w_min
+            if rng < 1:
+                continue
+            norm = (wave - w_min) / rng
 
-    # Axis labels
-    draw.text((plot_x, rainbow_y + rainbow_h + 4), "0°", fill=config.DIM)
-    draw.text((plot_x + plot_w // 4 - 10, rainbow_y + rainbow_h + 4), "90°", fill=config.LIGHT_DIM)
-    draw.text((plot_x + plot_w // 2 - 10, rainbow_y + rainbow_h + 4), "180°", fill=config.LIGHT_DIM)
-    draw.text((plot_x + 3 * plot_w // 4 - 10, rainbow_y + rainbow_h + 4), "270°", fill=config.LIGHT_DIM)
-    draw.text((plot_x + plot_w - 20, rainbow_y + rainbow_h + 4), "360°", fill=config.DIM)
-    draw.text((plot_x + plot_w // 2 - 15, rainbow_y + rainbow_h + 18), "HUE →", fill=config.DIM)
+            # Apply slight power curve to exaggerate peaks
+            norm_sharp = np.power(norm, 0.7)
 
-    # Y-axis label (saturation)
-    for i in range(5, -1, -1):
-        gy = plot_y + plot_h * (5 - i) // 5
-        label = f"{i * 20}%"
-        draw.text((x + 10, gy - 6), label, fill=config.LIGHT_DIM)
-    draw.text((x + 8, plot_y - 18), "SAT", fill=config.DIM)
+            # --- UPPER PEAKS ---
+            top_points = []
+            for i in range(0, num_cols, step):
+                px = margin_x + int((i / num_cols) * plot_w)
+                peak = norm_sharp[i] * max_peak_up
+                py = baseline_y - int(peak)
+                top_points.append((px, py))
 
+            if len(top_points) < 3:
+                continue
+
+            # Filled polygon (upward)
+            polygon_up = [(top_points[0][0], baseline_y)] + top_points + [(top_points[-1][0], baseline_y)]
+            draw.polygon(polygon_up, fill=(color_bright[0], color_bright[1], color_bright[2], 40))
+
+            # Inner gradient: brighter fill closer to edge
+            # Draw a second polygon slightly inside with more opacity
+            inner_points = []
+            for px, py in top_points:
+                inner_py = baseline_y - int((baseline_y - py) * 0.5)
+                inner_points.append((px, inner_py))
+            polygon_inner = [(inner_points[0][0], baseline_y)] + inner_points + [(inner_points[-1][0], baseline_y)]
+            draw.polygon(polygon_inner, fill=(color_bright[0], color_bright[1], color_bright[2], 25))
+
+            # Bright edge line with variable thickness
+            for j in range(len(top_points) - 1):
+                p1, p2 = top_points[j], top_points[j + 1]
+                idx = min(j * step, num_cols - 1)
+                edge_alpha = int(100 + norm_sharp[idx] * 155)
+                lw = 2 if norm_sharp[idx] > 0.5 else 1
+                draw.line([p1, p2],
+                          fill=(color_bright[0], color_bright[1], color_bright[2], edge_alpha), width=lw)
+
+            # White-hot highlights at tall peaks
+            for j in range(1, len(top_points) - 1):
+                idx = j * step
+                if idx < len(norm_sharp) and norm_sharp[idx] > 0.75:
+                    px, py = top_points[j]
+                    ga = int(norm_sharp[idx] * 140)
+                    # Outer glow in channel color
+                    draw.ellipse([px - 5, py - 5, px + 5, py + 5],
+                                 fill=(color_bright[0], color_bright[1], color_bright[2], ga // 2))
+                    # Inner bright core (whiter)
+                    white_mix = int(norm_sharp[idx] * 200)
+                    core_r = min(255, color_bright[0] + white_mix)
+                    core_g = min(255, color_bright[1] + white_mix)
+                    core_b = min(255, color_bright[2] + white_mix)
+                    draw.ellipse([px - 2, py - 2, px + 2, py + 2],
+                                 fill=(core_r, core_g, core_b, ga))
+
+            # --- DOWNWARD REFLECTION (mirror, dimmer) ---
+            bottom_points = []
+            for i in range(0, num_cols, step):
+                px = margin_x + int((i / num_cols) * plot_w)
+                peak = norm_sharp[i] * max_peak_down
+                py = baseline_y + int(peak)
+                bottom_points.append((px, py))
+
+            polygon_down = [(bottom_points[0][0], baseline_y)] + bottom_points + [(bottom_points[-1][0], baseline_y)]
+            draw.polygon(polygon_down, fill=(color_dim[0], color_dim[1], color_dim[2], 25))
+
+            # Dim reflection edge
+            for j in range(len(bottom_points) - 1):
+                p1, p2 = bottom_points[j], bottom_points[j + 1]
+                idx = min(j * step, num_cols - 1)
+                edge_alpha = int(40 + norm_sharp[idx] * 60)
+                draw.line([p1, p2],
+                          fill=(color_dim[0], color_dim[1], color_dim[2], edge_alpha), width=1)
+
+        # Very subtle baseline separator
+        draw.line([(margin_x, baseline_y), (w - margin_x, baseline_y)],
+                  fill=(50, 55, 65, 35), width=1)
+
+    # Border
+    draw.rectangle([0, 0, w - 1, h - 1], outline=(0, 180, 160, 80), width=2)
+
+    canvas.paste(panel, (x, y))
     return canvas
 
 
@@ -409,9 +445,8 @@ def process_image(input_path, output_path=None, config=Config):
     img = Image.open(input_path).convert('RGB')
     orig_w, orig_h = img.size
     aspect = orig_w / orig_h
-    print(f"  Source: {orig_w}×{orig_h}  aspect={aspect:.2f}")
+    print(f"  Source: {orig_w}\u00d7{orig_h}  aspect={aspect:.2f}")
 
-    # --- LAYOUT: 50/50 split ---
     canvas_w = config.OUTPUT_WIDTH
     img_half_w = int((canvas_w - config.PADDING * 3) * config.PANEL_SPLIT)
     panel_half_w = canvas_w - img_half_w - config.PADDING * 3
@@ -419,7 +454,6 @@ def process_image(input_path, output_path=None, config=Config):
     img_display_h = int(img_half_w / aspect)
     canvas_h = img_display_h + config.PADDING * 2
 
-    # Ensure minimum height for panels
     min_panel_h = 800
     if canvas_h < min_panel_h + config.PADDING * 2:
         canvas_h = min_panel_h + config.PADDING * 2
@@ -433,14 +467,12 @@ def process_image(input_path, output_path=None, config=Config):
     panel_w = panel_half_w
     panel_total_h = img_display_h
 
-    print(f"  Canvas: {canvas_w}×{canvas_h}")
-    print(f"  Image area: {img_half_w}×{img_display_h}")
-    print(f"  Panel area: {panel_w}×{panel_total_h}")
+    print(f"  Canvas: {canvas_w}\u00d7{canvas_h}")
+    print(f"  Image area: {img_half_w}\u00d7{img_display_h}")
+    print(f"  Panel area: {panel_w}\u00d7{panel_total_h}")
 
-    # --- Create canvas ---
     canvas = Image.new('RGBA', (canvas_w, canvas_h), config.BACKGROUND)
 
-    # --- Resize and place image ---
     img_resized = img.resize((img_half_w, img_display_h), Image.Resampling.LANCZOS)
     img_array = np.array(img_resized)
     gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
@@ -450,10 +482,8 @@ def process_image(input_path, output_path=None, config=Config):
         base = Image.blend(base, Image.new('RGB', base.size, (255, 255, 255)),
                            alpha=config.BASE_IMAGE_FADE)
     canvas.paste(base, (img_x, img_y))
-
     offset = (img_x, img_y)
 
-    # --- Overlays ---
     print("  [1/5] Contours...")
     contours = generate_contours(gray, config)
     canvas = draw_contours(canvas, contours, offset, config)
@@ -469,24 +499,19 @@ def process_image(input_path, output_path=None, config=Config):
     print("  [4/5] Color extraction...")
     colors = extract_colors(img_resized, config)
 
-    print("  [5/5] Hue-saturation scatter...")
-    hsv_data = compute_hs_scatter(img_resized)
+    print("  [5/5] Chromatic waveform...")
+    waveform_bands = compute_waveform_data(img_resized, config)
 
-    # --- HUD ---
     img_bounds = (img_x, img_y, img_half_w, img_display_h)
     canvas = draw_hud(canvas, img_bounds, (orig_w, orig_h), config)
 
-    # --- RIGHT PANELS (stacked) ---
-    # Top panel: Color distribution (55% of height)
-    color_panel_h = int(panel_total_h * 0.52)
+    color_panel_h = int(panel_total_h * 0.45)
     draw_color_panel(canvas, colors, (panel_x, panel_y), (panel_w, color_panel_h), config)
 
-    # Bottom panel: HS scatter (remaining height)
-    hs_panel_y = panel_y + color_panel_h + config.PANEL_GAP
-    hs_panel_h = panel_total_h - color_panel_h - config.PANEL_GAP
-    draw_hs_panel(canvas, hsv_data, colors, (panel_x, hs_panel_y), (panel_w, hs_panel_h), config)
+    wave_panel_y = panel_y + color_panel_h + config.PANEL_GAP
+    wave_panel_h = panel_total_h - color_panel_h - config.PANEL_GAP
+    draw_waveform_panel(canvas, waveform_bands, (panel_x, wave_panel_y), (panel_w, wave_panel_h), config)
 
-    # --- Save ---
     if output_path is None:
         output_path = input_file.parent / f"{input_file.stem}_survey_v4.png"
 
@@ -494,7 +519,7 @@ def process_image(input_path, output_path=None, config=Config):
     final.paste(canvas, mask=canvas.split()[3])
     final.save(str(output_path), quality=95)
 
-    print(f"\n✓ Saved: {output_path}")
+    print(f"\n\u2713 Saved: {output_path}")
     return str(output_path)
 
 
@@ -530,7 +555,7 @@ if __name__ == "__main__":
 
     try:
         result = process_image(input_path, output_path)
-        print(f"✓ Complete!")
+        print(f"\u2713 Complete!")
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"\u2717 Error: {e}")
         sys.exit(1)
