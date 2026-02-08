@@ -5,8 +5,8 @@ Clean 50/50 split layout:
   LEFT:  Source image with contour/gradient/constellation overlays + HUD
   RIGHT: Two stacked analysis panels
     TOP:    Color distribution (proportional bars + hex + percentages)
-    BOTTOM: Radial Chromatograph — clean circular color wheel
-            showing color distribution with elegant design
+    BOTTOM: Color Spectrograph — frequency distribution across hue spectrum
+            showing which colors appear most in the image
 """
 
 import numpy as np
@@ -265,10 +265,42 @@ def draw_color_panel(canvas, colors, position, size, config=Config):
 # RIGHT PANEL BOTTOM: RADIAL CHROMATOGRAPH — clean & well-designed
 # =============================================================================
 
-def draw_radial_chromatograph(canvas, dominant_colors, position, size, config=Config):
+def compute_color_spectrograph(image, num_bins=180):
     """
-    Radial chromatograph - clean circular color wheel showing color distribution.
-    Features concentric rings for saturation/value and radial segments for each color.
+    Analyze image and create hue frequency distribution.
+    Returns array of frequencies for each hue bin (0-360 degrees).
+    """
+    arr = np.array(image)
+    h, w, _ = arr.shape
+
+    # Convert to HSV and extract hues
+    hues = []
+    saturations = []
+
+    for i in range(0, h, 2):  # Sample every other row for speed
+        for j in range(0, w, 2):
+            r, g, b = arr[i, j] / 255.0
+            h_val, s_val, v_val = colorsys.rgb_to_hsv(r, g, b)
+
+            # Only count pixels with sufficient saturation and value
+            if s_val > 0.1 and v_val > 0.1:
+                hues.append(h_val * 360)
+                saturations.append(s_val)
+
+    # Create histogram bins
+    hist, bin_edges = np.histogram(hues, bins=num_bins, range=(0, 360))
+
+    # Smooth the histogram
+    from scipy.ndimage import gaussian_filter1d
+    hist_smooth = gaussian_filter1d(hist.astype(float), sigma=2)
+
+    return hist_smooth, bin_edges
+
+
+def draw_color_spectrograph(canvas, spectrum_data, bin_edges, position, size, config=Config):
+    """
+    Draw color spectrograph - frequency distribution across hue spectrum.
+    Like a rainbow bar where height shows how much of each color appears.
     """
     draw = ImageDraw.Draw(canvas, 'RGBA')
     x, y = position
@@ -279,99 +311,107 @@ def draw_radial_chromatograph(canvas, dominant_colors, position, size, config=Co
 
     # Title
     title_h = 55
-    draw.text((x + 20, y + 14), "RADIAL CHROMATOGRAPH", fill=config.PRIMARY)
-    draw.text((x + 20, y + 32), f"{len(dominant_colors)} color clusters · radial distribution", fill=config.LIGHT_DIM)
+    draw.text((x + 20, y + 14), "COLOR SPECTROGRAPH", fill=config.PRIMARY)
+    draw.text((x + 20, y + 32), "Hue frequency distribution · which colors dominate", fill=config.LIGHT_DIM)
 
-    # Calculate center and radius
-    available_h = h - title_h - 90
-    available_w = w - 100
-    radius = min(available_w, available_h) // 2 - 20
+    # Spec graph area
+    graph_margin_x = 40
+    graph_margin_y = 30
+    graph_x = x + graph_margin_x
+    graph_y = y + title_h + graph_margin_y
+    graph_w = w - graph_margin_x * 2
+    graph_h = h - title_h - graph_margin_y - 60
 
-    center_x = x + w // 2
-    center_y = y + title_h + available_h // 2 + 20
+    # Background
+    draw.rectangle([graph_x, graph_y, graph_x + graph_w, graph_y + graph_h],
+                   fill=(255, 255, 255, 255), outline=(200, 200, 200, 255), width=1)
 
-    # Draw background circle
-    draw.ellipse([center_x - radius - 5, center_y - radius - 5,
-                  center_x + radius + 5, center_y + radius + 5],
-                 fill=(255, 255, 255, 255), outline=(220, 220, 220, 255), width=2)
+    # Grid lines
+    for i in range(1, 5):
+        gy = graph_y + (graph_h * i // 5)
+        draw.line([(graph_x, gy), (graph_x + graph_w, gy)],
+                 fill=(240, 240, 240, 255), width=1)
 
-    # Draw concentric rings for reference
-    num_rings = 4
-    for i in range(1, num_rings + 1):
-        r = int(radius * (i / num_rings))
-        draw.ellipse([center_x - r, center_y - r, center_x + r, center_y + r],
-                    outline=(240, 240, 240, 255), width=1)
+    # Normalize spectrum data
+    max_val = spectrum_data.max()
+    if max_val > 0:
+        normalized = spectrum_data / max_val
+    else:
+        normalized = spectrum_data
 
-    # Draw radial segments for each color
-    total_angle = 360
-    start_angle = -90
+    # Draw spectrum bars
+    num_bins = len(spectrum_data)
+    bin_width = graph_w / num_bins
 
-    for i, (rgb, pct, h_val, s_val, v_val) in enumerate(dominant_colors):
-        angle_size = pct * total_angle
-        segment_radius = int(radius * (0.4 + s_val * 0.6))
-        r, g, b = rgb
+    for i, intensity in enumerate(normalized):
+        # Calculate hue for this bin
+        hue = (i / num_bins) * 360
 
-        # Create pie slice points
-        num_points = max(3, int(angle_size / 2))
-        points = [(center_x, center_y)]
-        for j in range(num_points + 1):
-            angle_rad = np.radians(start_angle + (j / num_points) * angle_size)
-            px = int(center_x + segment_radius * np.cos(angle_rad))
-            py = int(center_y + segment_radius * np.sin(angle_rad))
-            points.append((px, py))
+        # Convert hue to RGB for bar color
+        r, g, b = [int(c * 255) for c in colorsys.hsv_to_rgb(hue / 360, 0.9, 0.95)]
 
-        # Draw filled segment
-        draw.polygon(points, fill=(r, g, b, 255), outline=(r//2, g//2, b//2, 255), width=2)
+        # Bar dimensions
+        bx = graph_x + i * bin_width
+        bar_height = intensity * graph_h
+        by = graph_y + graph_h - bar_height
 
-        # Inner gradient for depth
-        inner_radius = int(segment_radius * 0.7)
-        inner_points = [(center_x, center_y)]
-        for j in range(num_points + 1):
-            angle_rad = np.radians(start_angle + (j / num_points) * angle_size)
-            px = int(center_x + inner_radius * np.cos(angle_rad))
-            py = int(center_y + inner_radius * np.sin(angle_rad))
-            inner_points.append((px, py))
+        # Draw bar with gradient effect
+        if bar_height > 2:
+            # Main bar
+            draw.rectangle([bx, by, bx + bin_width, graph_y + graph_h],
+                          fill=(r, g, b, 200), outline=None)
 
-        light_r = min(255, int(r * 1.2))
-        light_g = min(255, int(g * 1.2))
-        light_b = min(255, int(b * 1.2))
-        draw.polygon(inner_points, fill=(light_r, light_g, light_b, 180))
+            # Lighter top for depth
+            if bar_height > 10:
+                light_r = min(255, int(r * 1.3))
+                light_g = min(255, int(g * 1.3))
+                light_b = min(255, int(b * 1.3))
+                draw.rectangle([bx, by, bx + bin_width, by + 5],
+                              fill=(light_r, light_g, light_b, 180), outline=None)
 
-        # Percentage label
-        mid_angle = start_angle + angle_size / 2
-        label_radius = segment_radius * 0.85
-        label_x = int(center_x + label_radius * np.cos(np.radians(mid_angle)))
-        label_y = int(center_y + label_radius * np.sin(np.radians(mid_angle)))
+    # Draw spectrum reference bar at bottom
+    rainbow_y = graph_y + graph_h + 10
+    rainbow_h = 20
 
-        pct_text = f"{pct * 100:.1f}%"
-        text_bbox = draw.textbbox((label_x, label_y), pct_text)
-        text_w = text_bbox[2] - text_bbox[0]
-        text_h = text_bbox[3] - text_bbox[1]
+    for i in range(graph_w):
+        hue = (i / graph_w) * 360
+        r, g, b = [int(c * 255) for c in colorsys.hsv_to_rgb(hue / 360, 1.0, 1.0)]
+        draw.line([(graph_x + i, rainbow_y), (graph_x + i, rainbow_y + rainbow_h)],
+                 fill=(r, g, b, 255))
 
-        draw.rectangle([label_x - text_w//2 - 4, label_y - text_h//2 - 2,
-                       label_x + text_w//2 + 4, label_y + text_h//2 + 2],
-                      fill=(255, 255, 255, 220), outline=None)
+    draw.rectangle([graph_x, rainbow_y, graph_x + graph_w, rainbow_y + rainbow_h],
+                  outline=(180, 180, 180, 255), width=1)
 
-        draw.text((label_x - text_w//2, label_y - text_h//2), pct_text, fill=config.PRIMARY)
+    # Axis labels
+    draw.text((graph_x, rainbow_y + rainbow_h + 4), "0°", fill=config.DIM)
+    draw.text((graph_x + graph_w // 4 - 10, rainbow_y + rainbow_h + 4), "90°", fill=config.LIGHT_DIM)
+    draw.text((graph_x + graph_w // 2 - 15, rainbow_y + rainbow_h + 4), "180°", fill=config.LIGHT_DIM)
+    draw.text((graph_x + 3 * graph_w // 4 - 15, rainbow_y + rainbow_h + 4), "270°", fill=config.LIGHT_DIM)
+    draw.text((graph_x + graph_w - 25, rainbow_y + rainbow_h + 4), "360°", fill=config.DIM)
 
-        start_angle += angle_size
+    # Y-axis label
+    draw.text((x + 8, graph_y - 20), "Frequency", fill=config.DIM)
+    draw.text((graph_x + graph_w // 2 - 20, rainbow_y + rainbow_h + 22), "Hue (degrees)", fill=config.DIM)
 
-    # Center circle
-    center_radius = 35
-    draw.ellipse([center_x - center_radius, center_y - center_radius,
-                  center_x + center_radius, center_y + center_radius],
-                 fill=(250, 250, 250, 255), outline=config.PRIMARY, width=3)
+    # Peak detection - mark dominant hues
+    peaks = []
+    for i in range(2, len(normalized) - 2):
+        if normalized[i] > normalized[i-1] and normalized[i] > normalized[i+1]:
+            if normalized[i] > 0.5:  # Significant peaks only
+                peaks.append((i, normalized[i]))
 
-    draw.text((center_x - 25, center_y - 18), f"{len(dominant_colors)}", fill=config.PRIMARY)
-    draw.text((center_x - 22, center_y + 2), "colors", fill=config.DIM)
+    # Mark peaks
+    for peak_idx, peak_val in peaks[:3]:  # Top 3 peaks
+        bx = graph_x + peak_idx * bin_width
+        by = graph_y + graph_h - peak_val * graph_h
 
-    # Legend
-    legend_y = y + h - 35
-    legend_text = "Radius: Saturation · Segments: Distribution"
-    text_bbox = draw.textbbox((0, 0), legend_text)
-    text_w = text_bbox[2] - text_bbox[0]
-    legend_x = center_x - text_w // 2
-    draw.text((legend_x, legend_y), legend_text, fill=config.LIGHT_DIM)
+        # Peak marker
+        draw.ellipse([bx - 4, by - 4, bx + 4, by + 4],
+                    fill=config.SECONDARY, outline=(255, 255, 255, 255), width=2)
+
+        # Peak label
+        hue_deg = int((peak_idx / num_bins) * 360)
+        draw.text((bx - 15, by - 20), f"{hue_deg}°", fill=config.SECONDARY)
 
     return canvas
 
@@ -443,7 +483,7 @@ def process_image(input_path, output_path=None, config=Config):
     print("  [4/5] Color extraction...")
     colors = extract_colors(img_resized, config)
 
-    print("  [5/5] Radial chromatograph...")
+    print("  [5/5] Color spectrograph...")
     
 
     img_bounds = (img_x, img_y, img_half_w, img_display_h)
@@ -454,7 +494,8 @@ def process_image(input_path, output_path=None, config=Config):
 
     radial_panel_y = panel_y + color_panel_h + config.PANEL_GAP
     radial_panel_h = panel_total_h - color_panel_h - config.PANEL_GAP
-    draw_radial_chromatograph(canvas, colors, (panel_x, radial_panel_y), (panel_w, radial_panel_h), config)
+    spectrum_data, bin_edges = compute_color_spectrograph(img_resized)
+    draw_color_spectrograph(canvas, spectrum_data, bin_edges, (panel_x, radial_panel_y), (panel_w, radial_panel_h), config)
 
     if output_path is None:
         output_path = input_file.parent / f"{input_file.stem}_survey_v4.png"

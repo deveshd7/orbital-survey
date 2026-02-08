@@ -6,7 +6,7 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #f5f7fa;
     min-height: 100vh;
     padding: 20px;
     color: #333;
@@ -19,8 +19,12 @@ body {
 
 header {
     text-align: center;
-    color: white;
+    color: #1a202c;
     margin-bottom: 30px;
+    background: white;
+    padding: 40px 20px;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 header h1 {
@@ -28,11 +32,11 @@ header h1 {
     font-weight: 800;
     letter-spacing: 2px;
     margin-bottom: 10px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    color: #00b4a0;
 }
 
 .subtitle {
-    color: rgba(255, 255, 255, 0.9);
+    color: #64748b;
     font-size: 1.1rem;
 }
 
@@ -82,15 +86,17 @@ header h1 {
 /* Loading */
 #loading {
     text-align: center;
-    color: white;
+    background: white;
     padding: 60px;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 
 .spinner {
     width: 60px;
     height: 60px;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
+    border: 4px solid rgba(0, 180, 160, 0.2);
+    border-top-color: #00b4a0;
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin: 0 auto 20px;
