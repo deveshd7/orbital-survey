@@ -5,8 +5,8 @@ Clean 50/50 split layout:
   LEFT:  Source image with contour/gradient/constellation overlays + HUD
   RIGHT: Two stacked analysis panels
     TOP:    Color distribution (proportional bars + hex + percentages)
-    BOTTOM: Chromatic Waveform — translucent crystalline RGB channel peaks
-            on a dark background, inspired by generative data art
+    BOTTOM: Radial Chromatograph — clean circular color wheel
+            showing color distribution with elegant design
 """
 
 import numpy as np
@@ -51,9 +51,6 @@ class Config:
     NUM_COLORS = 10
     GRID_DIVISIONS = 8
 
-    WAVEFORM_NUM_BANDS = 9
-    WAVEFORM_SMOOTHING = 4
-    WAVEFORM_PEAK_SCALE = 0.85
 
 
 # =============================================================================
@@ -265,170 +262,117 @@ def draw_color_panel(canvas, colors, position, size, config=Config):
 
 
 # =============================================================================
-# RIGHT PANEL BOTTOM: CHROMATIC WAVEFORM (crystalline peaks on dark bg)
+# RIGHT PANEL BOTTOM: RADIAL CHROMATOGRAPH — clean & well-designed
 # =============================================================================
 
-def compute_waveform_data(image, config=Config):
+def draw_radial_chromatograph(canvas, dominant_colors, position, size, config=Config):
     """
-    Sample horizontal bands from the image, extract per-column RGB averages.
-    Each band becomes a waveform triplet (R, G, B).
+    Radial chromatograph - clean circular color wheel showing color distribution.
+    Features concentric rings for saturation/value and radial segments for each color.
     """
-    arr = np.array(image).astype(float)
-    h, w, _ = arr.shape
-    num_bands = config.WAVEFORM_NUM_BANDS
-    band_h = h // num_bands
-    sigma = config.WAVEFORM_SMOOTHING
-
-    bands = []
-    for i in range(num_bands):
-        y_start = i * band_h
-        y_end = min((i + 1) * band_h, h)
-        strip = arr[y_start:y_end, :, :]
-        col_avg = strip.mean(axis=0)  # (w, 3)
-        r_smooth = gaussian_filter(col_avg[:, 0], sigma=sigma)
-        g_smooth = gaussian_filter(col_avg[:, 1], sigma=sigma)
-        b_smooth = gaussian_filter(col_avg[:, 2], sigma=sigma)
-        bands.append((r_smooth, g_smooth, b_smooth))
-    return bands
-
-
-def draw_waveform_panel(canvas, waveform_bands, position, size, config=Config):
-    """
-    Crystalline RGB waveforms on dark background.
-    Each band draws three translucent channel polygons with upward peaks
-    AND mirrored downward reflections for that crystalline/aurora effect.
-    Colors blend where channels overlap, creating cyans, magentas, and whites.
-    """
+    draw = ImageDraw.Draw(canvas, 'RGBA')
     x, y = position
     w, h = size
 
-    # Use numpy for the dark panel to allow additive blending
-    panel_arr = np.zeros((h, w, 4), dtype=np.uint8)
-    panel_arr[:, :, 3] = 255
-    # Dark background with subtle blue tint
-    panel_arr[:, :, 0] = 10
-    panel_arr[:, :, 1] = 12
-    panel_arr[:, :, 2] = 20
+    # Panel background
+    draw.rectangle([x, y, x + w, y + h], fill=config.PANEL_BG, outline=config.PANEL_BORDER, width=2)
 
-    panel = Image.fromarray(panel_arr, 'RGBA')
-    draw = ImageDraw.Draw(panel, 'RGBA')
+    # Title
+    title_h = 55
+    draw.text((x + 20, y + 14), "RADIAL CHROMATOGRAPH", fill=config.PRIMARY)
+    draw.text((x + 20, y + 32), f"{len(dominant_colors)} color clusters · radial distribution", fill=config.LIGHT_DIM)
 
-    title_h = 50
-    draw.text((20, 12), "CHROMATIC WAVEFORM", fill=(0, 200, 180, 255))
-    draw.text((20, 30), f"{len(waveform_bands)} horizontal bands \u00b7 RGB channel intensity",
-              fill=(100, 110, 120, 255))
+    # Calculate center and radius
+    available_h = h - title_h - 90
+    available_w = w - 100
+    radius = min(available_w, available_h) // 2 - 20
 
-    plot_y_start = title_h + 8
-    plot_h = h - title_h - 12
-    num_bands = len(waveform_bands)
-    band_spacing = plot_h / num_bands
+    center_x = x + w // 2
+    center_y = y + title_h + available_h // 2 + 20
 
-    margin_x = 25
-    plot_w = w - margin_x * 2
+    # Draw background circle
+    draw.ellipse([center_x - radius - 5, center_y - radius - 5,
+                  center_x + radius + 5, center_y + radius + 5],
+                 fill=(255, 255, 255, 255), outline=(220, 220, 220, 255), width=2)
 
-    for band_idx, (r_wave, g_wave, b_wave) in enumerate(waveform_bands):
-        baseline_y = int(plot_y_start + (band_idx + 0.5) * band_spacing)
-        max_peak_up = band_spacing * config.WAVEFORM_PEAK_SCALE * 0.65
-        max_peak_down = band_spacing * config.WAVEFORM_PEAK_SCALE * 0.35  # Smaller reflection
+    # Draw concentric rings for reference
+    num_rings = 4
+    for i in range(1, num_rings + 1):
+        r = int(radius * (i / num_rings))
+        draw.ellipse([center_x - r, center_y - r, center_x + r, center_y + r],
+                    outline=(240, 240, 240, 255), width=1)
 
-        num_cols = len(r_wave)
-        step = max(1, num_cols // 400)  # Higher resolution sampling
+    # Draw radial segments for each color
+    total_angle = 360
+    start_angle = -90
 
-        # Channel definitions with distinct hues
-        # Cyan-ish blue, Magenta-ish pink, Golden-green
-        channels = [
-            (b_wave, (60, 180, 255), (30, 100, 200)),     # Blue/Cyan
-            (g_wave, (0, 255, 180), (0, 180, 120)),        # Teal/Green
-            (r_wave, (255, 80, 160), (200, 40, 120)),      # Pink/Magenta
-        ]
+    for i, (rgb, pct, h_val, s_val, v_val) in enumerate(dominant_colors):
+        angle_size = pct * total_angle
+        segment_radius = int(radius * (0.4 + s_val * 0.6))
+        r, g, b = rgb
 
-        for wave, color_bright, color_dim in channels:
-            w_min, w_max = wave.min(), wave.max()
-            rng = w_max - w_min
-            if rng < 1:
-                continue
-            norm = (wave - w_min) / rng
+        # Create pie slice points
+        num_points = max(3, int(angle_size / 2))
+        points = [(center_x, center_y)]
+        for j in range(num_points + 1):
+            angle_rad = np.radians(start_angle + (j / num_points) * angle_size)
+            px = int(center_x + segment_radius * np.cos(angle_rad))
+            py = int(center_y + segment_radius * np.sin(angle_rad))
+            points.append((px, py))
 
-            # Apply slight power curve to exaggerate peaks
-            norm_sharp = np.power(norm, 0.7)
+        # Draw filled segment
+        draw.polygon(points, fill=(r, g, b, 255), outline=(r//2, g//2, b//2, 255), width=2)
 
-            # --- UPPER PEAKS ---
-            top_points = []
-            for i in range(0, num_cols, step):
-                px = margin_x + int((i / num_cols) * plot_w)
-                peak = norm_sharp[i] * max_peak_up
-                py = baseline_y - int(peak)
-                top_points.append((px, py))
+        # Inner gradient for depth
+        inner_radius = int(segment_radius * 0.7)
+        inner_points = [(center_x, center_y)]
+        for j in range(num_points + 1):
+            angle_rad = np.radians(start_angle + (j / num_points) * angle_size)
+            px = int(center_x + inner_radius * np.cos(angle_rad))
+            py = int(center_y + inner_radius * np.sin(angle_rad))
+            inner_points.append((px, py))
 
-            if len(top_points) < 3:
-                continue
+        light_r = min(255, int(r * 1.2))
+        light_g = min(255, int(g * 1.2))
+        light_b = min(255, int(b * 1.2))
+        draw.polygon(inner_points, fill=(light_r, light_g, light_b, 180))
 
-            # Filled polygon (upward)
-            polygon_up = [(top_points[0][0], baseline_y)] + top_points + [(top_points[-1][0], baseline_y)]
-            draw.polygon(polygon_up, fill=(color_bright[0], color_bright[1], color_bright[2], 40))
+        # Percentage label
+        mid_angle = start_angle + angle_size / 2
+        label_radius = segment_radius * 0.85
+        label_x = int(center_x + label_radius * np.cos(np.radians(mid_angle)))
+        label_y = int(center_y + label_radius * np.sin(np.radians(mid_angle)))
 
-            # Inner gradient: brighter fill closer to edge
-            # Draw a second polygon slightly inside with more opacity
-            inner_points = []
-            for px, py in top_points:
-                inner_py = baseline_y - int((baseline_y - py) * 0.5)
-                inner_points.append((px, inner_py))
-            polygon_inner = [(inner_points[0][0], baseline_y)] + inner_points + [(inner_points[-1][0], baseline_y)]
-            draw.polygon(polygon_inner, fill=(color_bright[0], color_bright[1], color_bright[2], 25))
+        pct_text = f"{pct * 100:.1f}%"
+        text_bbox = draw.textbbox((label_x, label_y), pct_text)
+        text_w = text_bbox[2] - text_bbox[0]
+        text_h = text_bbox[3] - text_bbox[1]
 
-            # Bright edge line with variable thickness
-            for j in range(len(top_points) - 1):
-                p1, p2 = top_points[j], top_points[j + 1]
-                idx = min(j * step, num_cols - 1)
-                edge_alpha = int(100 + norm_sharp[idx] * 155)
-                lw = 2 if norm_sharp[idx] > 0.5 else 1
-                draw.line([p1, p2],
-                          fill=(color_bright[0], color_bright[1], color_bright[2], edge_alpha), width=lw)
+        draw.rectangle([label_x - text_w//2 - 4, label_y - text_h//2 - 2,
+                       label_x + text_w//2 + 4, label_y + text_h//2 + 2],
+                      fill=(255, 255, 255, 220), outline=None)
 
-            # White-hot highlights at tall peaks
-            for j in range(1, len(top_points) - 1):
-                idx = j * step
-                if idx < len(norm_sharp) and norm_sharp[idx] > 0.75:
-                    px, py = top_points[j]
-                    ga = int(norm_sharp[idx] * 140)
-                    # Outer glow in channel color
-                    draw.ellipse([px - 5, py - 5, px + 5, py + 5],
-                                 fill=(color_bright[0], color_bright[1], color_bright[2], ga // 2))
-                    # Inner bright core (whiter)
-                    white_mix = int(norm_sharp[idx] * 200)
-                    core_r = min(255, color_bright[0] + white_mix)
-                    core_g = min(255, color_bright[1] + white_mix)
-                    core_b = min(255, color_bright[2] + white_mix)
-                    draw.ellipse([px - 2, py - 2, px + 2, py + 2],
-                                 fill=(core_r, core_g, core_b, ga))
+        draw.text((label_x - text_w//2, label_y - text_h//2), pct_text, fill=config.PRIMARY)
 
-            # --- DOWNWARD REFLECTION (mirror, dimmer) ---
-            bottom_points = []
-            for i in range(0, num_cols, step):
-                px = margin_x + int((i / num_cols) * plot_w)
-                peak = norm_sharp[i] * max_peak_down
-                py = baseline_y + int(peak)
-                bottom_points.append((px, py))
+        start_angle += angle_size
 
-            polygon_down = [(bottom_points[0][0], baseline_y)] + bottom_points + [(bottom_points[-1][0], baseline_y)]
-            draw.polygon(polygon_down, fill=(color_dim[0], color_dim[1], color_dim[2], 25))
+    # Center circle
+    center_radius = 35
+    draw.ellipse([center_x - center_radius, center_y - center_radius,
+                  center_x + center_radius, center_y + center_radius],
+                 fill=(250, 250, 250, 255), outline=config.PRIMARY, width=3)
 
-            # Dim reflection edge
-            for j in range(len(bottom_points) - 1):
-                p1, p2 = bottom_points[j], bottom_points[j + 1]
-                idx = min(j * step, num_cols - 1)
-                edge_alpha = int(40 + norm_sharp[idx] * 60)
-                draw.line([p1, p2],
-                          fill=(color_dim[0], color_dim[1], color_dim[2], edge_alpha), width=1)
+    draw.text((center_x - 25, center_y - 18), f"{len(dominant_colors)}", fill=config.PRIMARY)
+    draw.text((center_x - 22, center_y + 2), "colors", fill=config.DIM)
 
-        # Very subtle baseline separator
-        draw.line([(margin_x, baseline_y), (w - margin_x, baseline_y)],
-                  fill=(50, 55, 65, 35), width=1)
+    # Legend
+    legend_y = y + h - 35
+    legend_text = "Radius: Saturation · Segments: Distribution"
+    text_bbox = draw.textbbox((0, 0), legend_text)
+    text_w = text_bbox[2] - text_bbox[0]
+    legend_x = center_x - text_w // 2
+    draw.text((legend_x, legend_y), legend_text, fill=config.LIGHT_DIM)
 
-    # Border
-    draw.rectangle([0, 0, w - 1, h - 1], outline=(0, 180, 160, 80), width=2)
-
-    canvas.paste(panel, (x, y))
     return canvas
 
 
@@ -499,8 +443,8 @@ def process_image(input_path, output_path=None, config=Config):
     print("  [4/5] Color extraction...")
     colors = extract_colors(img_resized, config)
 
-    print("  [5/5] Chromatic waveform...")
-    waveform_bands = compute_waveform_data(img_resized, config)
+    print("  [5/5] Radial chromatograph...")
+    
 
     img_bounds = (img_x, img_y, img_half_w, img_display_h)
     canvas = draw_hud(canvas, img_bounds, (orig_w, orig_h), config)
@@ -508,9 +452,9 @@ def process_image(input_path, output_path=None, config=Config):
     color_panel_h = int(panel_total_h * 0.45)
     draw_color_panel(canvas, colors, (panel_x, panel_y), (panel_w, color_panel_h), config)
 
-    wave_panel_y = panel_y + color_panel_h + config.PANEL_GAP
-    wave_panel_h = panel_total_h - color_panel_h - config.PANEL_GAP
-    draw_waveform_panel(canvas, waveform_bands, (panel_x, wave_panel_y), (panel_w, wave_panel_h), config)
+    radial_panel_y = panel_y + color_panel_h + config.PANEL_GAP
+    radial_panel_h = panel_total_h - color_panel_h - config.PANEL_GAP
+    draw_radial_chromatograph(canvas, colors, (panel_x, radial_panel_y), (panel_w, radial_panel_h), config)
 
     if output_path is None:
         output_path = input_file.parent / f"{input_file.stem}_survey_v4.png"
