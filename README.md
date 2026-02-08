@@ -46,24 +46,33 @@ pip install -r requirements.txt
 
 ### Usage
 
-**Recommended: Use V2 for best visuals**
+**Recommended: Use V3 for analysis-focused output**
 
 ```bash
 # Interactive mode (file dialog)
-python orbital_survey_v2.py
+python orbital_survey_v3.py
 
 # Command line
-python orbital_survey_v2.py input.jpg output.png
+python orbital_survey_v3.py input.jpg output.png
 
 # Auto-naming
-python orbital_survey_v2.py input.jpg
+python orbital_survey_v3.py input.jpg
 ```
 
-**V2 includes:**
-- 40% larger side panel (better readability)
-- Percentage labels on color bars
-- Radial FFT spectrum (visually interesting)
-- Cleaner design and typography
+**V3 features (analysis-focused):**
+- Panels are 50% of canvas (analysis is primary)
+- Color analysis is largest section (50% of panel)
+- Frequency shown as informative spectral energy graph
+- 8 colors with temperature indicators
+- Image is smaller (reference, not focus)
+
+**Or use V2 for balanced presentation:**
+```bash
+python orbital_survey_v2.py input.jpg
+```
+- Balanced image/analysis split
+- Radial FFT visualization
+- 40% panel, 60% image
 
 ## Configuration
 
@@ -87,19 +96,27 @@ class Config:
 
 ## Version Comparison
 
-### V2 (Recommended) ⭐
+### V3 (Recommended for Analysis) ⭐
+- ✅ **Analysis-focused** - panels are 50% of canvas
+- ✅ **Color analysis is primary** - 50% of panel space
+- ✅ **Spectral energy graph** - informative frequency analysis
+- ✅ 8 colors with temperature indicators (warm/cool)
+- ✅ Image reduced (reference, not focus)
 - ✅ Full resolution preservation
-- ✅ Adaptive layouts (portrait/landscape/panorama)
-- ✅ **40% larger side panel** (better readability)
-- ✅ **Percentage labels** on color bars
-- ✅ **Radial FFT visualization** (more interesting)
-- ✅ Cleaner design and typography
+- ✅ Adaptive layouts
+
+### V2 (Balanced Presentation)
+- ✅ Balanced image/analysis split (60/40)
+- ✅ Radial FFT visualization (decorative)
+- ✅ 40% panel with clean design
+- ✅ Full resolution preservation
+- ✅ Adaptive layouts
 
 ### Enhanced Version
 - ✅ Full resolution preservation
 - ✅ Adaptive layouts
 - ✅ Better error handling
-- 30% side panel (smaller than V2)
+- 30% side panel
 
 ### Original Version
 - Fixed output width (1920px)
