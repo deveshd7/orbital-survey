@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orbital Survey - Interactive</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🛰️ ORBITAL SURVEY</h1>
+            <p class="subtitle">Interactive Image Analysis with D3.js</p>
+        </header>
+
+        <!-- Upload Section -->
+        <div id="upload-section">
+            <div class="upload-box" id="upload-box">
+                <input type="file" id="file-input" accept="image/*" style="display: none;">
+                <div class="upload-content">
+                    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p>Drop image here or click to upload</p>
+                    <p class="hint">Supports JPG, PNG, WebP (max 16MB)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing image...</p>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" style="display: none;">
+            <div class="layout-grid">
+                <!-- Left: Image Preview -->
+                <div class="image-panel">
+                    <div class="panel">
+                        <h2>Source Image</h2>
+                        <div id="image-container"></div>
+                        <div id="image-stats" class="stats-row"></div>
+                    </div>
+                </div>
+
+                <!-- Right: Visualizations -->
+                <div class="viz-panel">
+                    <!-- Color Distribution -->
+                    <div class="panel">
+                        <h2>Chromatic Distribution</h2>
+                        <p class="subtitle" id="color-subtitle"></p>
+                        <div id="color-chart"></div>
+                    </div>
+
+                    <!-- Hue-Saturation Scatter -->
+                    <div class="panel">
+                        <h2>Hue × Saturation Map</h2>
+                        <p class="subtitle" id="scatter-subtitle"></p>
+                        <div id="scatter-plot"></div>
+                        <div id="scatter-tooltip" class="tooltip"></div>
+                    </div>
+
+                    <!-- Stats Summary -->
+                    <div class="panel stats-panel">
+                        <h2>Analysis Summary</h2>
+                        <div id="stats-grid"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export Button -->
+            <div class="export-section">
+                <button id="export-btn" class="btn-export">
+                    📥 Export Full Analysis (PNG)
+                </button>
+                <button id="new-btn" class="btn-secondary">
+                    🔄 Analyze Another Image
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/visualizations.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
